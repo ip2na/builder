@@ -6,20 +6,21 @@ on:
       branch:
         description: "Kernel source branch"
         required: true
-        default: staging
+        default: master
         type: choice
         options:
-          - main
+          - master
           - staging
 
       build_type:
         description: "Build variant"
         required: true
-        default: susfs
+        default: susfs_nomount
         type: choice
         options:
           - all
           - susfs
+          - susfs_nomount
           - vanilla
 
       clang:
@@ -32,15 +33,6 @@ on:
           - llvm
           - zyc
           - aosp
-
-      nomount:
-        description: "patch NoMount?"
-        required: true
-        default: enable
-        type: choice
-        options:
-          - enable
-          - disable
 
 jobs:
   build:
@@ -56,6 +48,8 @@ jobs:
         include:
           - name: KSU+SUSFS
             type: susfs
+            has_susfs: true
+            nomount: false
             zip_base: Kernel-KSU-SUSFS
             release_base: AnyaKernel-GKI-5.10
             build_host: anyaprjkt
@@ -65,8 +59,23 @@ jobs:
             release_tags_main_base: "#Anyakernel #gki-5.10 #ksu #susfs"
             release_tags_staging_base: "#Anyakernel #staging #gki-5.10 #ksu #susfs"
 
+          - name: KSU+SUSFS+NoMount
+            type: susfs_nomount
+            has_susfs: true
+            nomount: true
+            zip_base: Kernel-KSU-SUSFS-NoMount
+            release_base: AnyaKernel-GKI-5.10
+            build_host: anyaprjkt
+            telegram_label_base: "KSU Next + SUSFS + NoMount"
+            telegram_tags_main_base: "#Anyakernel #update #gki510 #ksu #susfs #nomount"
+            telegram_tags_staging_base: "#Anyakernel #staging #gki510 #ksu #susfs #nomount"
+            release_tags_main_base: "#Anyakernel #gki-5.10 #ksu #susfs #nomount"
+            release_tags_staging_base: "#Anyakernel #staging #gki-5.10 #ksu #susfs #nomount"
+
           - name: Vanilla
             type: vanilla
+            has_susfs: false
+            nomount: false
             zip_base: Kernel-Vanilla
             release_base: AnyaKernel-Vanilla-5.10
             build_host: anyaprjkt
@@ -88,49 +97,30 @@ jobs:
             echo "should_run=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Resolve branch & nomount variables
+      - name: Resolve branch variables
         if: steps.gate.outputs.should_run == 'true'
         run: |
           BRANCH="${{ github.event.inputs.branch }}"
-          NOMOUNT_INPUT="${{ github.event.inputs.nomount }}"
           IS_STAGING=false
-
-          if [[ "$NOMOUNT_INPUT" == "enable" ]]; then
-            NOMOUNT_ENABLED=true
-            ZIP_SUFFIX="${{ matrix.zip_base }}-NoMount"
-            TELEGRAM_LABEL_FULL="${{ matrix.telegram_label_base }} + NoMount"
-            TELEGRAM_TAGS_MAIN="${{ matrix.telegram_tags_main_base }} #nomount"
-            TELEGRAM_TAGS_STAGING="${{ matrix.telegram_tags_staging_base }} #nomount"
-            RELEASE_TAGS_MAIN="${{ matrix.release_tags_main_base }} #nomount"
-            RELEASE_TAGS_STAGING="${{ matrix.release_tags_staging_base }} #nomount"
-          else
-            NOMOUNT_ENABLED=false
-            ZIP_SUFFIX="${{ matrix.zip_base }}"
-            TELEGRAM_LABEL_FULL="${{ matrix.telegram_label_base }}"
-            TELEGRAM_TAGS_MAIN="${{ matrix.telegram_tags_main_base }}"
-            TELEGRAM_TAGS_STAGING="${{ matrix.telegram_tags_staging_base }}"
-            RELEASE_TAGS_MAIN="${{ matrix.release_tags_main_base }}"
-            RELEASE_TAGS_STAGING="${{ matrix.release_tags_staging_base }}"
-          fi
 
           if [[ "$BRANCH" == "staging" ]]; then
             IS_STAGING=true
-            ZIP_NAME="${ZIP_SUFFIX}-Staging.zip"
+            ZIP_NAME="${{ matrix.zip_base }}-Staging.zip"
             RELEASE_PREFIX="${{ matrix.release_base }}-Staging"
-            TELEGRAM_VERSION="${TELEGRAM_LABEL_FULL} [STAGING]"
-            TELEGRAM_TAGS="$TELEGRAM_TAGS_STAGING"
-            RELEASE_TAGS="$RELEASE_TAGS_STAGING"
+            TELEGRAM_VERSION="${{ matrix.telegram_label_base }} [STAGING]"
+            TELEGRAM_TAGS="${{ matrix.telegram_tags_staging_base }}"
+            RELEASE_TAGS="${{ matrix.release_tags_staging_base }}"
           else
-            ZIP_NAME="${ZIP_SUFFIX}.zip"
+            ZIP_NAME="${{ matrix.zip_base }}.zip"
             RELEASE_PREFIX="${{ matrix.release_base }}"
-            TELEGRAM_VERSION="$TELEGRAM_LABEL_FULL"
-            TELEGRAM_TAGS="$TELEGRAM_TAGS_MAIN"
-            RELEASE_TAGS="$RELEASE_TAGS_MAIN"
+            TELEGRAM_VERSION="${{ matrix.telegram_label_base }}"
+            TELEGRAM_TAGS="${{ matrix.telegram_tags_main_base }}"
+            RELEASE_TAGS="${{ matrix.release_tags_main_base }}"
           fi
 
           {
             echo "IS_STAGING=$IS_STAGING"
-            echo "NOMOUNT_ENABLED=$NOMOUNT_ENABLED"
+            echo "NOMOUNT_ENABLED=${{ matrix.nomount }}"
             echo "KERNEL_BRANCH=$BRANCH"
             echo "ZIP_NAME=$ZIP_NAME"
             echo "RELEASE_PREFIX=$RELEASE_PREFIX"
@@ -233,7 +223,7 @@ jobs:
             kernel
 
       - name: Integrate KernelSU Next + SUSFS
-        if: steps.gate.outputs.should_run == 'true' && matrix.type == 'susfs'
+        if: steps.gate.outputs.should_run == 'true' && matrix.has_susfs == true
         run: |
           cd kernel
 
@@ -256,15 +246,11 @@ jobs:
           patch -p1 < "$PATCHES"/*.patch
 
       - name: Integrate NoMount
-        if: steps.gate.outputs.should_run == 'true' && env.NOMOUNT_ENABLED == 'true'
+        if: steps.gate.outputs.should_run == 'true' && matrix.nomount == true
         run: |
           cd kernel
 
-          if [[ "${{ matrix.type }}" == "vanilla" ]]; then
-            NOMOUNT_BRANCH="dev"
-          else
-            NOMOUNT_BRANCH="master"
-          fi
+          NOMOUNT_BRANCH="master"
 
           git clone --depth=1 -b "$NOMOUNT_BRANCH" https://github.com/maxsteeel/nomount.git .nomount
 
@@ -277,7 +263,7 @@ jobs:
           rm -rf .nomount
 
       - name: Apply all-managers patch
-        if: steps.gate.outputs.should_run == 'true' && matrix.type == 'susfs'
+        if: steps.gate.outputs.should_run == 'true' && matrix.has_susfs == true
         run: |
           curl -LSs "${{ secrets.PATCH_URL }}" -o /tmp/ksun-allmanager.patch
           patch -p1 --forward -d kernel/KernelSU-Next < /tmp/ksun-allmanager.patch
@@ -287,14 +273,14 @@ jobs:
         run: |
           DEFCONFIG="kernel/arch/arm64/configs/gki_defconfig"
 
-          if [[ "${{ matrix.type }}" == "susfs" ]]; then
+          if [[ "${{ matrix.has_susfs }}" == "true" ]]; then
             printf '%s\n' "${{ secrets.CONFIG_LINES_SUSFS }}" >> "$DEFCONFIG"
           else
             printf '%s\n' "${{ secrets.CONFIG_LINES_VANILLA }}" >> "$DEFCONFIG"
           fi
 
       - name: Inject NoMount config
-        if: steps.gate.outputs.should_run == 'true' && env.NOMOUNT_ENABLED == 'true'
+        if: steps.gate.outputs.should_run == 'true' && matrix.nomount == true
         run: |
           echo "CONFIG_NOMOUNT=y" >> kernel/arch/arm64/configs/gki_defconfig
 
@@ -342,11 +328,11 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           EXTRA_NOTES=""
-          if [[ "$NOMOUNT_ENABLED" == "true" ]]; then
+          if [[ "${{ matrix.nomount }}" == "true" ]]; then
             EXTRA_NOTES="**👻 NoMount commit:** $NOMOUNT_COMMIT"
           fi
 
-          if [[ "${{ matrix.type }}" == "susfs" ]]; then
+          if [[ "${{ matrix.has_susfs }}" == "true" ]]; then
             EXTRA_NOTES="**🔐 KSU commit:** $KSU_COMMIT
           **🛡️ SUSFS commit:** $SUSFS_COMMIT
           $EXTRA_NOTES"
@@ -395,12 +381,12 @@ jobs:
           RELEASE_URL="https://github.com/AnyaKernel/Kernel-Release/releases/tag/$RELEASE_TAG"
 
           EXTRA_INFO=""
-          if [[ "$NOMOUNT_ENABLED" == "true" ]]; then
+          if [[ "${{ matrix.nomount }}" == "true" ]]; then
             EXTRA_INFO="
           👻 <b>NoMount commit:</b> $NOMOUNT_COMMIT"
           fi
 
-          if [[ "${{ matrix.type }}" == "susfs" ]]; then
+          if [[ "${{ matrix.has_susfs }}" == "true" ]]; then
             EXTRA_INFO="
           🔐 <b>KSU commit:</b> $KSU_COMMIT
           🛡️ <b>SUSFS commit:</b> $SUSFS_COMMIT${EXTRA_INFO}"
