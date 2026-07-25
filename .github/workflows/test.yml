@@ -199,12 +199,12 @@ jobs:
         if: steps.gate.outputs.should_run == 'true' && steps.cache-clang.outputs.cache-hit != 'true'
         run: |
           if [[ "$CLANG_TYPE" == "flat" ]]; then
-            wget -q "$CLANG_URL"
-            tar -xzf "$(basename "$CLANG_URL")"
-            rm "$(basename "$CLANG_URL")"
+            curl -fL -o clang.tar.gz "$CLANG_URL"
+            tar -xzf clang.tar.gz
+            rm clang.tar.gz
           else
             mkdir -p "$CLANG_DIR"
-            wget -q -O clang.tar.gz "$CLANG_URL"
+            curl -fL -o clang.tar.gz "$CLANG_URL"
             tar -xzf clang.tar.gz -C "$CLANG_DIR"
             rm clang.tar.gz
           fi
@@ -227,7 +227,7 @@ jobs:
         run: |
           cd kernel
 
-          curl -LSs \
+          curl -fLSs \
             "https://raw.githubusercontent.com/pershoot/KernelSU-Next/refs/heads/next-susfs/kernel/setup.sh" \
             | bash -s dev-susfs
 
@@ -243,7 +243,7 @@ jobs:
           PATCHES="$(pwd)/.susfs/kernel_patches"
           cp -R "$PATCHES/fs/"* ./fs/
           cp -R "$PATCHES/include/"* ./include/
-          patch -p1 < "$PATCHES"/*.patch
+          patch -p1 --forward < "$PATCHES"/*.patch
 
       - name: Integrate NoMount
         if: steps.gate.outputs.should_run == 'true' && matrix.nomount == true
@@ -265,7 +265,7 @@ jobs:
       - name: Apply all-managers patch
         if: steps.gate.outputs.should_run == 'true' && matrix.has_susfs == true
         run: |
-          curl -LSs "${{ secrets.PATCH_URL }}" -o /tmp/ksun-allmanager.patch
+          curl -fLSs "${{ secrets.PATCH_URL }}" -o /tmp/ksun-allmanager.patch
           patch -p1 --forward -d kernel/KernelSU-Next < /tmp/ksun-allmanager.patch
 
       - name: Apply defconfig overlay
