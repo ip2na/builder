@@ -93,12 +93,11 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Clone NoMount source
         run: |
           set -euo pipefail
-
           git clone --depth=1 -b dev https://github.com/maxsteeel/nomount.git .nomount-src
 
       - name: Validate DDK environment
@@ -124,15 +123,8 @@ jobs:
           set -euo pipefail
 
           mkdir -p "$MODULE_DIR"
-          cp .nomount-src/kernel/src/nomount.{c,h} "$MODULE_DIR/"
-
-          if ! grep -Fq '#include <linux/module.h>' "$MODULE_DIR/nomount.c"; then
-            sed -i '1i #include <linux/module.h>' "$MODULE_DIR/nomount.c"
-          fi
-
-          if ! grep -Fq 'MODULE_LICENSE(' "$MODULE_DIR/nomount.c"; then
-            printf '\n%s\n' 'MODULE_LICENSE("GPL");' >> "$MODULE_DIR/nomount.c"
-          fi
+          cp .nomount-src/kernel/src/nomount.c "$MODULE_DIR/"
+          cp .nomount-src/kernel/src/nomount.h "$MODULE_DIR/" 2>/dev/null || true
 
           if ! grep -Fq 'MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);' "$MODULE_DIR/nomount.c"; then
             printf '\n%s\n' 'MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);' >> "$MODULE_DIR/nomount.c"
@@ -161,7 +153,7 @@ jobs:
           ls -lh "$ARTIFACT"
 
       - name: Upload module
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: nomount-${{ matrix.kmi }}-arm64
           path: ${{ env.ARTIFACT }}
@@ -173,7 +165,7 @@ jobs:
 
     steps:
       - name: Download all modules
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v4
         with:
           path: release
           pattern: nomount-*-arm64
