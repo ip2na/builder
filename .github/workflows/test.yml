@@ -9,7 +9,7 @@ on:
         default: master
         type: choice
         options:
-          - master
+          - main
           - staging
 
       build_type:
