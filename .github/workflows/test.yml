@@ -64,7 +64,7 @@ jobs:
             has_susfs: true
             nomount: true
             zip_base: Kernel-KSU-SUSFS-NoMount
-            release_base: AnyaKernel-GKI-5.10
+            release_base: AnyaKernel-GKI-5.10-NoMount
             build_host: anyaprjkt
             telegram_label_base: "KSU Next + SUSFS + NoMount"
             telegram_tags_main_base: "#Anyakernel #update #gki510 #ksu #susfs #nomount"
@@ -372,7 +372,11 @@ jobs:
               --notes "## 🌸 Anya Kernel — $TELEGRAM_VERSION
 
           $COMMON_BODY" \
-              --latest
+              --latest \
+            || gh release upload "$RELEASE_TAG" \
+                --repo AnyaKernel/Kernel-Release \
+                "ak3/$ZIP_NAME" \
+                --clobber
           fi
 
       - name: Send Telegram notification
