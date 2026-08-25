@@ -250,15 +250,17 @@ jobs:
         run: |
           cd kernel
 
-          NOMOUNT_BRANCH="master"
+          NOMOUNT_BRANCH="dev"
 
           git clone --depth=1 -b "$NOMOUNT_BRANCH" https://github.com/maxsteeel/nomount.git .nomount
 
           echo "NOMOUNT_COMMIT=$(git -C .nomount log -1 --pretty=format:'%s (%an)')" >> "$GITHUB_ENV"
 
-          patch -p1 --forward < .nomount/kernel/patches/nomount_5.10_kernel_integration.patch
-          cp .nomount/kernel/src/nomount.c fs/
-          cp .nomount/kernel/src/nomount.h fs/
+          mkdir -p fs/nomount
+          cp -f .nomount/kernel/src/* fs/nomount/
+
+          echo 'source "fs/nomount/Kconfig"' >> fs/Kconfig
+          echo 'obj-$(CONFIG_NOMOUNT) += nomount/' >> fs/Makefile
 
           rm -rf .nomount
 
