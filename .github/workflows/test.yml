@@ -11,6 +11,7 @@ on:
         options:
           - main
           - staging
+          - linux
 
       build_type:
         description: "Build variant"
